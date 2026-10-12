@@ -105,11 +105,13 @@ class WriteAheadLog:
         self._file = open(filename, "a+b")
 
     def close(self) -> None:
-        f, self._file = self._file, None
-        if f is not None:
+         """Close the WAL file if it is open."""
+         f, self._file = self._file, None
+         if f is not None:
             f.close()
 
     def _ensure_open(self):
+        """Return the open WAL file, reopening it if necessary."""
         if self._file is None:
             self._file = open(self.filename, "a+b")
         return self._file
