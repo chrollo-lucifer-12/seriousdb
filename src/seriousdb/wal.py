@@ -104,14 +104,15 @@ class WriteAheadLog:
         self._offset = os.path.getsize(filename) if os.path.isfile(filename) else 0
         self._file = open(filename, "a+b")
 
-    def _close(self) -> None:
-        if self._file is not None:
-            self._file.close()
-            self._file = None
+    def close(self) -> None:
+        f, self._file = self._file, None
+        if f is not None:
+            f.close()
 
     def _ensure_open(self):
         if self._file is None:
             self._file = open(self.filename, "a+b")
+        return self._file
 
     def append(self, entry: WalEntry) -> None:
         """Append `entry` to the log and fsync it.
@@ -127,19 +128,19 @@ class WriteAheadLog:
             If the log file cannot be written.
         """
         self._repair_torn_tail()
-        self._ensure_open()
+        f = self._ensure_open()
 
         data = (json.dumps(entry.to_dict()) + "\n").encode()
 
         try:
-            self._file.write(data)
-            self._file.flush()
-            os.fsync(self._file.fileno())
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
 
             self._offset += len(data)
         except Exception:
             try:
-                self._file.close()
+                f.close()
             except OSError:
                 pass
             finally:
@@ -167,15 +168,15 @@ class WriteAheadLog:
             self._offset = 0
             return []
 
-        self._ensure_open()
+        f = self._ensure_open()
 
         entries: list[WalEntry] = []
         good_offset = 0
         found_bad_entry = False
 
-        self._file.seek(0)
+        f.seek(0)
 
-        for raw_line in self._file:
+        for raw_line in f:
             if not raw_line.endswith(b"\n"):
                 found_bad_entry = True
                 break
@@ -198,7 +199,7 @@ class WriteAheadLog:
                 "Truncating write-ahead log %s to its last known-good entry",
                 self.filename,
             )
-            self._file.truncate(good_offset)
+            f.truncate(good_offset)
 
         self._offset = good_offset
         return entries
@@ -215,7 +216,7 @@ class WriteAheadLog:
         with tempfile.NamedTemporaryFile("wb", dir=dir_name, delete=False) as tmp_file:
             pass
 
-        self._close()
+        self.close()
 
         try:
             os.replace(tmp_file.name, self.filename)
